@@ -1,0 +1,51 @@
+{
+  "name": "claude-widget",
+  "version": "1.0.0",
+  "description": "A modern floating widget that syncs with your Claude account and displays token usage",
+  "main": "dist/main.js",
+  "homepage": "./",
+  "author": "BlackSamuron0305",
+  "license": "MIT",
+  "scripts": {
+    "dev": "concurrently \"npm run build:watch\" \"wait-on dist/main.js && electron .\"",
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "dist": "npm run build && electron-builder",
+    "start": "electron .",
+    "react:dev": "vite",
+    "react:build": "vite build"
+  },
+  "devDependencies": {
+    "@types/electron": "^1.6.10",
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "concurrently": "^8.2.0",
+    "electron": "^27.0.0",
+    "electron-builder": "^24.6.0",
+    "typescript": "^5.2.0",
+    "vite": "^5.0.0",
+    "wait-on": "^7.0.0"
+  },
+  "dependencies": {
+    "electron-squirrel-startup": "^1.1.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "build": {
+    "appId": "com.claudewidget.app",
+    "productName": "Claude Widget",
+    "files": [
+      "dist/**/*",
+      "public/**/*",
+      "node_modules/**/*"
+    ],
+    "directories": {
+      "buildResources": "assets"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}
