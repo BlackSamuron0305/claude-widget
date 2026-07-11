@@ -37,7 +37,9 @@ class ClaudeQuotaWidget(QMainWindow):
             if self.credentials_path.exists():
                 with open(self.credentials_path, 'r') as f:
                     creds = json.load(f)
-                    self.oauth_token = creds.get('authorization_token')
+                    self.oauth_token = creds.get('claudeAiOauth', {}).get('accessToken')
+                    if self.oauth_token:
+                        print(f"✓ OAuth token loaded successfully")
         except Exception as e:
             print(f"Could not load credentials: {e}")
 
@@ -49,14 +51,17 @@ class ClaudeQuotaWidget(QMainWindow):
             req = urllib.request.Request(
                 'https://api.anthropic.com/beta/usage',
                 headers={
-                    'Authorization': f'Bearer {self.oauth_token}',
+                    'x-api-key': self.oauth_token,
                     'anthropic-beta': 'usage-2024-06-01'
                 }
             )
             with urllib.request.urlopen(req, timeout=10) as response:
                 data = json.loads(response.read())
                 self.quota_data = data.get('usage', {})
+                print(f"Quota data fetched: {self.quota_data}")
                 self.update_display()
+        except urllib.error.HTTPError as e:
+            print(f"API Error {e.code}: {e.read().decode()}")
         except Exception as e:
             print(f"Error fetching quota: {e}")
 
