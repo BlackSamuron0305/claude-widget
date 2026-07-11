@@ -1,107 +1,74 @@
-# Claude Widget
+# Claude Usage HUD
 
-A beautiful, modern floating widget for Windows that displays your Claude API token usage in real-time. Built with Electron and React, featuring a sleek glassmorphism design.
+A small always-on-top desktop HUD showing your Claude Max **session (5h)** and **weekly (7d)** usage, so you don't have to open a browser to check.
 
-## Features
+There is no public API for Claude subscription usage. This widget instead reads the same numbers Claude Code already renders in its statusline, via a small bridge script that Claude Code calls on every render.
 
-✨ **Modern Glassmorphism UI** - Sleek, frosted glass design with dark theme
-📊 **Real-time Token Tracking** - Current usage and monthly limit visualization
-📈 **Usage History** - Sparkline chart showing your token usage over the last 30 days
-🔄 **Auto-update** - Updates every 5 minutes automatically
-🖥️ **Always On Top** - Floating window stays above other applications
-🖱️ **System Tray** - Minimize to system tray for quick access
-🔐 **Secure API Key Storage** - Your API key is stored locally and never shared
+## How it works
 
-## Installation
+```
+Claude Code  --(JSON on stdin)-->  usage-bridge script  --(writes)-->  ~/.claude/usage-widget/state.json
+                                          |
+                                          +--(prints)--> normal one-line statusline text
 
-### Prerequisites
-- Windows 10 or later
-- Node.js 16+ (for development)
-- npm or yarn
+Electron widget  --(watches + polls)-->  state.json  --(IPC)-->  renderer HUD
+```
 
-### Quick Start
+The bridge script only runs while Claude Code is running — there is no way to get fresher numbers when it's closed. The widget shows the last known values plus a visible age indicator (`live` vs `updated Xm ago`). This is expected, not a bug.
 
-1. Clone the repository:
+## Install
+
+### 1. Wire up the statusline bridge
+
+The bridge script is already installed at `~/.claude/usage-bridge.ps1` (Windows/PowerShell) and merged into `~/.claude/settings.json`:
+
+```json
+"statusLine": {
+  "type": "command",
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\Users\\<you>\\.claude\\usage-bridge.ps1\"",
+  "refreshInterval": 10
+}
+```
+
+If setting this up on a new machine, copy `usage-bridge.ps1` to `~/.claude/`, and merge the `statusLine` block above into your existing `~/.claude/settings.json` (use the **absolute path** — Claude Code does not expand `~`).
+
+On macOS/Linux you'd write an equivalent bash+jq script and point `command` at that instead.
+
+### 2. Install and run the widget
+
 ```bash
-git clone https://github.com/BlackSamuron0305/claude-widget.git
 cd claude-widget
-```
-
-2. Install dependencies:
-```bash
 npm install
-```
-
-3. Get your Claude API key from [console.anthropic.com](https://console.anthropic.com)
-
-4. Run the widget:
-```bash
 npm start
 ```
 
-## Development
+`npm install` runs a `postinstall` step (`scripts/fix-electron-install.js`) that repairs a known Electron install issue on some systems where the binary zip downloads and caches correctly but extraction silently stops partway through. If `npm start` fails with an Electron-not-installed error, run `npm install` again — the repair step is idempotent.
 
-### Build for development
-```bash
-npm run dev
-```
+### 3. Package it (no terminal needed to launch)
 
-### Build for production
-```bash
-npm run build
-```
-
-### Package as executable
 ```bash
 npm run dist
 ```
 
-## Usage
+Produces a portable `.exe` under `release/`. Pin it to your taskbar or add a shortcut to your Windows Startup folder to launch it automatically.
 
-1. Launch the widget
-2. Enter your Claude API key (obtained from [console.anthropic.com](https://console.anthropic.com))
-3. The widget will connect to your Claude account and start tracking usage
-4. Usage updates automatically every 5 minutes
-5. Click the system tray icon to show/hide the widget
+## Widget states
 
-## Features Explained
+- **Live** — green dot, data captured in the last 60 seconds.
+- **Updated Xm/Xh ago** — grey dot, showing the age of the last known values while Claude Code isn't running.
+- **No data yet** — Claude Code hasn't rendered a statusline in this session yet.
+- **API-key session** — `rate_limits` is absent because you're authenticated via API key rather than a Pro/Max subscription; the widget says so instead of showing fake bars.
 
-### Current Usage Bar
-Shows how many tokens you've used this month vs. your monthly limit
-- Visual progress bar with percentage
-- Formatted number display (K = thousands, M = millions)
+## Tray menu
 
-### Remaining Quota
-Displays how many tokens you have left in your monthly quota
-- Separate progress bar for remaining tokens
-- Percentage of quota remaining
+Right-click the tray icon for:
+- **Reset position** — snaps the HUD back to the top-right corner
+- **Click-through** — lets clicks pass through the widget to whatever's behind it
+- **Launch at login** — toggles Windows startup registration
+- **Quit**
 
-### Usage History
-A sparkline chart showing your token consumption over the last 30 days
-- Helps you track trends and identify usage patterns
+## Notes
 
-## Architecture
-
-- **Electron** - Desktop application framework
-- **React** - UI component library
-- **TypeScript** - Type-safe development
-- **Claude API** - Real-time usage data
-
-## Security
-
-- API key is stored locally in your user data directory
-- Communication with Claude API uses HTTPS
-- Context isolation enabled for security
-- No telemetry or external tracking
-
-## License
-
-MIT
-
-## Contributing
-
-Feel free to submit issues and enhancement requests!
-
-## Support
-
-For issues or questions, please visit the [GitHub Issues](https://github.com/BlackSamuron0305/claude-widget/issues) page.
+- The window position is draggable (via the header) and persisted to disk, so it reopens wherever you left it.
+- Bar colors shift with usage: green under 50%, amber 50–80%, red above 80%.
+- No network calls are made by the widget itself — all data comes from the local `state.json` file written by the bridge script.

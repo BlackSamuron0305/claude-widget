@@ -1,51 +1,35 @@
 {
-  "name": "claude-widget",
-  "version": "1.0.0",
-  "description": "A modern floating widget that syncs with your Claude account and displays token usage",
-  "main": "dist/main.js",
-  "homepage": "./",
+  "name": "claude-usage-widget",
+  "version": "2.0.0",
+  "description": "A small always-on-top HUD showing Claude Max session/weekly usage, sourced from the Claude Code statusline.",
+  "main": "main.js",
   "author": "BlackSamuron0305",
   "license": "MIT",
   "scripts": {
-    "dev": "concurrently \"npm run electron:dev\" \"npm run vite:dev\"",
-    "electron:dev": "tsc && wait-on dist/main.js && electron .",
-    "vite:dev": "vite",
-    "build": "tsc && vite build",
-    "dist": "npm run build && electron-builder",
-    "start": "npm run build && electron .",
-    "vite:build": "vite build"
+    "postinstall": "node scripts/fix-electron-install.js",
+    "start": "electron .",
+    "dist": "electron-builder"
   },
   "devDependencies": {
-    "@types/electron": "^1.6.10",
-    "@types/node": "^20.0.0",
-    "@types/react": "^18.2.0",
-    "@types/react-dom": "^18.2.0",
-    "@vitejs/plugin-react": "^4.0.0",
-    "concurrently": "^8.2.0",
-    "electron": "^31.0.0",
-    "electron-builder": "^24.6.0",
-    "typescript": "^5.2.0",
-    "vite": "^5.0.0",
-    "wait-on": "^7.0.0"
-  },
-  "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
   },
   "build": {
-    "appId": "com.claudewidget.app",
-    "productName": "Claude Widget",
+    "appId": "com.claudewidget.usagehud",
+    "productName": "Claude Usage HUD",
     "files": [
-      "dist/**/*",
-      "public/**/*",
-      "node_modules/**/*"
+      "main.js",
+      "preload.js",
+      "index.html",
+      "renderer.js",
+      "assets/**/*"
     ],
     "directories": {
-      "buildResources": "assets"
+      "buildResources": "assets",
+      "output": "release"
     },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+    "win": {
+      "target": "portable"
     }
   }
 }
