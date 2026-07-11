@@ -1,7 +1,6 @@
 let latestState = null;
 
 const el = {
-  model: document.getElementById('model-name'),
   empty: document.getElementById('empty-state'),
   blocks: document.getElementById('quota-blocks'),
   sessionPct: document.getElementById('session-pct'),
@@ -77,7 +76,6 @@ function render() {
   }
 
   const state = latestState;
-  el.model.textContent = (state.model && state.model.display_name) || '-';
 
   if (!state.rate_limits) {
     showEmptyState('Session limits unavailable. This appears to be an API-key session, not a Pro/Max subscription.');

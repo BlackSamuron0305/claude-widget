@@ -2,6 +2,7 @@ const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage } = require
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const { execFile } = require('child_process');
 
 const WIDTH = 300;
 const HEIGHT = 150;
@@ -70,6 +71,7 @@ function createWindow() {
     skipTaskbar: true,
     hasShadow: false,
     show: false,
+    focusable: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -78,10 +80,12 @@ function createWindow() {
     }
   });
 
-  win.setAlwaysOnTop(true, 'screen-saver');
   win.loadFile('index.html');
 
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => {
+    win.show();
+    pinToBottom();
+  });
 
   let moveDebounce = null;
   win.on('move', () => {
@@ -89,10 +93,28 @@ function createWindow() {
     moveDebounce = setTimeout(() => {
       const [x, y] = win.getPosition();
       savePosition(x, y);
+      pinToBottom();
     }, 300);
   });
 
   win.on('closed', () => { win = null; });
+}
+
+function pinToBottom() {
+  if (!win || process.platform !== 'win32') return;
+  try {
+    const buf = win.getNativeWindowHandle();
+    const hwnd = buf.length >= 8 ? buf.readBigUInt64LE(0).toString() : buf.readUInt32LE(0).toString();
+    execFile('powershell', [
+      '-NoProfile', '-ExecutionPolicy', 'Bypass',
+      '-File', path.join(__dirname, 'scripts', 'pin-to-bottom.ps1'),
+      '-Hwnd', hwnd
+    ], (err) => {
+      if (err) console.error('pin-to-bottom failed:', err.message);
+    });
+  } catch (err) {
+    console.error('pin-to-bottom error:', err.message);
+  }
 }
 
 function resetPosition() {
