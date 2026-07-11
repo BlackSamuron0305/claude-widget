@@ -15,7 +15,7 @@ namespace ClaudeUsageHud;
 public partial class MainWindow : Window
 {
     private const int WIDTH = 300;
-    private const int HEIGHT = 150;
+    private const int HEIGHT = 204; // fits the two quota blocks + header/footer at their natural layout height (measured ~198px)
     private const int EDGE_MARGIN = 16;
 
     private static readonly string StatePath = Path.Combine(
@@ -149,8 +149,13 @@ public partial class MainWindow : Window
     private void ApplyNonActivatingStyle()
     {
         var hwnd = new WindowInteropHelper(this).Handle;
+        // WPF already applies WS_EX_LAYERED itself for AllowsTransparency and manages the
+        // layered-surface presentation internally. Re-asserting that bit via a raw
+        // SetWindowLong call after the window has a surface desyncs WPF's presentation
+        // from the OS's layered-window state and leaves the window blank/invisible even
+        // though it's still a live, correctly z-ordered process. Only touch NOACTIVATE here.
         int exStyle = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE);
-        exStyle |= NativeMethods.WS_EX_NOACTIVATE | NativeMethods.WS_EX_LAYERED;
+        exStyle |= NativeMethods.WS_EX_NOACTIVATE;
         NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE, exStyle);
     }
 
@@ -342,7 +347,7 @@ public partial class MainWindow : Window
     {
         if (_latestState is null)
         {
-            ShowEmptyState("No data yet — waiting for Claude Code to run in this session.");
+            ShowEmptyState("No data yet — waiting for Claude Code");
             return;
         }
 
@@ -350,7 +355,7 @@ public partial class MainWindow : Window
 
         if (state.RateLimits is null)
         {
-            ShowEmptyState("Session limits unavailable. This appears to be an API-key session, not a Pro/Max subscription.");
+            ShowEmptyState("Limits unavailable — API-key session, not Pro/Max");
             return;
         }
 
