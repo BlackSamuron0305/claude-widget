@@ -58,11 +58,13 @@ The app registers itself to launch at login automatically (via `HKCU\Software\Mi
 
 ## Behavior notes
 
-- The window sits at the **bottom of the z-order** — pinned directly above the desktop (`Progman`) via `SetWindowPos`, so every other application window opens above it. It never takes focus (`WS_EX_NOACTIVATE`), so clicking it to drag never brings it to the front.
+- The window lives **on the desktop itself**, not as a normal top-level window. It's reparented into the `WorkerW` that hosts your desktop icons — the same technique Rainmeter and wallpaper-engine widgets use — so it renders above the wallpaper but below every real application window. If that `WorkerW` can't be found for any reason, it falls back to being a normal, never-activated window rather than risking going invisible.
+- It never takes focus (`WS_EX_NOACTIVATE`), so clicking it to drag never brings it to the front.
 - Position is draggable (via the card) and persisted to disk, so it reopens wherever you left it.
 - Bar colors shift with usage: green under 50%, amber 50–80%, red above 80%.
 - No network calls are made by the widget itself — all data comes from the local `state.json` file written by the bridge script.
 - A background poll (every 2s) and a `FileSystemWatcher` both watch `state.json`, but the UI only re-renders (bar widths/colors) when the underlying data actually changes — a separate 1-second tick updates only the countdown text, to avoid needless redraws.
+- DPI awareness (`PerMonitorV2`) is declared in `app.manifest`. Don't remove it to silence the `WFO0003` build warning — that warning suggests a WinForms-only API that has no effect on the WPF half of this app; removing the manifest declaration instead breaks screen-coordinate math on scaled displays.
 
 ## Tray menu
 
@@ -71,3 +73,12 @@ Right-click the tray icon for:
 - **Click-through** — lets clicks pass through the widget to whatever's behind it
 - **Launch at login** — toggles Windows startup registration
 - **Quit**
+
+## Troubleshooting
+
+**Widget process is running but nothing shows on screen.** Since the widget sits at the desktop layer, any normal window occupying that screen corner will cover it — that's by design, not a bug. Minimize/move whatever's there to confirm. If it's still not visible with a clear corner, check:
+- `~/.claude/usage-widget/state.json` exists and has recent `captured_at`
+- `~/.claude/usage-bridge.ps1` exists and `~/.claude/settings.json` still has the `statusLine` block (a Claude Code update or re-login can reset `settings.json` to defaults, silently dropping this)
+- The app's extended window styles aren't being re-touched anywhere after `WindowInteropHelper` first exposes the `Hwnd` — reapplying `WS_EX_LAYERED` on a window that already has `AllowsTransparency=True` desyncs WPF's own layered-surface presentation from the OS state and silently renders nothing, while the process stays alive and reports a perfectly normal position/z-order.
+
+**No quota bars, just an empty-state message.** Either Claude Code hasn't rendered a statusline yet this session (`No data yet`), or you're authenticated via API key rather than a Pro/Max subscription (`rate_limits` is absent from the payload, shown as `Limits unavailable`).

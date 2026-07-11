@@ -72,13 +72,13 @@ public partial class MainWindow : Window
         }
         else
         {
-            var (x, y) = DefaultTopRight();
+            var (x, y) = DefaultPosition();
             Left = x;
             Top = y;
         }
     }
 
-    private static (double X, double Y) DefaultTopRight()
+    private static (double X, double Y) DefaultPosition()
     {
         var wa = SystemParameters.WorkArea;
         return (wa.Right - WIDTH - EDGE_MARGIN, wa.Top + EDGE_MARGIN);
@@ -130,7 +130,7 @@ public partial class MainWindow : Window
 
     private void ResetPosition()
     {
-        var (x, y) = DefaultTopRight();
+        var (x, y) = DefaultPosition();
         Left = x;
         Top = y;
         SavePosition(x, y);
@@ -159,13 +159,56 @@ public partial class MainWindow : Window
         NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE, exStyle);
     }
 
+    // Parents the window into the WorkerW that hosts desktop icons - the standard technique
+    // used by desktop-widget apps (Rainmeter, wallpaper engines, etc.) for a HUD that sits
+    // above the wallpaper but below every real application window. This is deliberately NOT
+    // "insert below Progman" - Progman itself can sit AT or below the actual visible desktop
+    // surface on modern Windows (icons are hosted by a separate WorkerW sibling), so pinning
+    // there previously made the window a live, correctly-rendering process that was still
+    // genuinely invisible on screen, sitting behind the desktop surface itself.
     private void PinToBottom()
     {
         var hwnd = new WindowInteropHelper(this).Handle;
         var progman = NativeMethods.FindWindow("Progman", "Program Manager");
-        var insertAfter = progman != IntPtr.Zero ? progman : NativeMethods.HWND_BOTTOM;
-        NativeMethods.SetWindowPos(hwnd, insertAfter, 0, 0, 0, 0,
-            NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOACTIVATE);
+        if (progman == IntPtr.Zero) return; // leave as a normal, non-activated window - safe default
+
+        // Ask Progman to spawn the WorkerW that hosts desktop icons, if it hasn't already.
+        NativeMethods.SendMessageTimeout(progman, NativeMethods.WM_SPAWN_WORKER, IntPtr.Zero, IntPtr.Zero, 0, 1000, out _);
+
+        var workerW = FindDesktopWorkerW();
+        if (workerW == IntPtr.Zero) return; // safe default: normal window, never below the desktop
+
+        NativeMethods.SetParent(hwnd, workerW);
+
+        // WorkerW spans the full virtual desktop from (0,0), so screen coordinates and
+        // parent-relative coordinates coincide - but reassert position explicitly since
+        // SetParent can otherwise leave the window in an unexpected spot.
+        NativeMethods.SetWindowPos(hwnd, IntPtr.Zero, (int)Left, (int)Top, 0, 0,
+            NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
+    }
+
+    // Standard technique (used by Rainmeter, wallpaper engines, etc.): find whichever
+    // top-level window hosts the SHELLDLL_DefView (the desktop icon view - this may be
+    // Progman directly, or a WorkerW that the icons were reparented into, depending on
+    // Windows version), then take the WorkerW sibling that comes immediately after it in
+    // z-order. That sibling is the transparent layer sitting just above the wallpaper -
+    // exactly where a desktop-hosted widget belongs.
+    private static IntPtr FindDesktopWorkerW()
+    {
+        IntPtr targetWorkerW = IntPtr.Zero;
+
+        NativeMethods.EnumWindows((topHandle, _) =>
+        {
+            var shellView = NativeMethods.FindWindowEx(topHandle, IntPtr.Zero, "SHELLDLL_DefView", null);
+            if (shellView != IntPtr.Zero)
+            {
+                targetWorkerW = NativeMethods.FindWindowEx(IntPtr.Zero, topHandle, "WorkerW", null);
+                return false; // stop enumerating
+            }
+            return true;
+        }, IntPtr.Zero);
+
+        return targetWorkerW;
     }
 
     private void SetClickThrough(bool enabled)
