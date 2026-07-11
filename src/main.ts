@@ -1,12 +1,12 @@
 import { app, BrowserWindow, ipcMain, Menu, Tray } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
-import fetch from 'node-fetch';
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
+const isDev = !app.isPackaged;
 
-const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');
+const CONFIG_PATH = path.join(app.getPath('userData'), 'claude-widget-config.json');
 
 interface UsageData {
   currentUsage: number;
@@ -37,6 +37,7 @@ function loadConfig(): { apiKey?: string } {
 
 function saveConfig(config: { apiKey: string }) {
   try {
+    fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true });
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
   } catch (e) {
     console.error('Failed to save config:', e);
@@ -45,19 +46,18 @@ function saveConfig(config: { apiKey: string }) {
 
 async function fetchUsageData(apiKey: string): Promise<UsageData> {
   try {
-    const response = await fetch('https://api.anthropic.com/beta/usage', {
+    const response = await (global as any).fetch('https://api.anthropic.com/beta/usage', {
       headers: {
         'x-api-key': apiKey,
         'anthropic-beta': 'usage-2024-06-01'
       }
-    }) as any;
+    });
 
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`);
     }
 
     const data: any = await response.json();
-
     const currentUsage = data.usage?.input_tokens || 0;
     const monthlyLimit = 1000000;
     const remainingQuota = Math.max(0, monthlyLimit - currentUsage);
@@ -67,7 +67,7 @@ async function fetchUsageData(apiKey: string): Promise<UsageData> {
       monthlyLimit,
       remainingQuota,
       lastUpdated: new Date().toISOString(),
-      history: usageData.history || []
+      history: [...(usageData.history || [])]
     };
 
     newData.history.push({
@@ -90,12 +90,12 @@ async function fetchUsageData(apiKey: string): Promise<UsageData> {
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 380,
-    height: 520,
+    height: 560,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
-      enableRemoteModule: false,
-      nodeIntegration: false
+      nodeIntegration: false,
+      sandbox: true
     },
     alwaysOnTop: true,
     frame: false,
@@ -104,7 +104,15 @@ function createWindow() {
     show: false
   });
 
-  mainWindow.loadFile(path.join(__dirname, '../public/index.html'));
+  const startUrl = isDev
+    ? 'http://localhost:5173'
+    : `file://${path.join(__dirname, '../renderer/index.html')}`;
+
+  mainWindow.loadURL(startUrl);
+
+  if (isDev) {
+    mainWindow.webContents.openDevTools();
+  }
 
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show();
@@ -118,7 +126,14 @@ function createWindow() {
 }
 
 function createTray() {
-  tray = new Tray(path.join(__dirname, '../assets/icon.png'));
+  const iconPath = path.join(__dirname, '../assets/icon.png');
+  const icon = fs.existsSync(iconPath) ? iconPath : undefined;
+
+  if (icon) {
+    tray = new Tray(icon);
+  } else {
+    tray = new Tray(path.join(__dirname, '../assets/icon-default.png'));
+  }
 
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -131,6 +146,7 @@ function createTray() {
         }
       }
     },
+    { type: 'separator' },
     {
       label: 'Quit',
       click: () => {
