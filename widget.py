@@ -2,12 +2,12 @@ import sys
 import json
 import os
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime
 import urllib.request
 import urllib.error
 
-from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel
+from PyQt6.QtCore import Qt, QTimer, QSize
 from PyQt6.QtGui import QFont, QColor
 
 class ClaudeQuotaWidget(QMainWindow):
@@ -16,21 +16,23 @@ class ClaudeQuotaWidget(QMainWindow):
         self.credentials_path = Path.home() / '.claude' / '.credentials.json'
         self.oauth_token = None
         self.quota_data = {}
+        self.connection_error = False
         self.setup_window()
         self.load_oauth_credentials()
         self.setup_ui()
         self.setup_timer()
+        self.fetch_quota_data()
 
     def setup_window(self):
-        self.setWindowTitle("Claude Quota")
+        self.setWindowTitle("Claude")
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setFixedSize(320, 380)
-        self.setWindowOpacity(0.87)
+        self.setFixedSize(300, 240)
+        self.setWindowOpacity(0.90)
 
         screen = QApplication.primaryScreen()
         screen_geo = screen.geometry()
-        self.move(screen_geo.width() - 340, screen_geo.height() - 420)
+        self.move(screen_geo.width() - 330, screen_geo.height() - 280)
 
     def load_oauth_credentials(self):
         try:
@@ -38,13 +40,75 @@ class ClaudeQuotaWidget(QMainWindow):
                 with open(self.credentials_path, 'r') as f:
                     creds = json.load(f)
                     self.oauth_token = creds.get('claudeAiOauth', {}).get('accessToken')
-                    if self.oauth_token:
-                        print(f"✓ OAuth token loaded successfully")
         except Exception as e:
-            print(f"Could not load credentials: {e}")
+            print(f"Error loading credentials: {e}")
+
+    def setup_ui(self):
+        central = QWidget()
+        self.setCentralWidget(central)
+        central.setStyleSheet("""
+            QWidget {
+                background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%);
+                border: 1px solid rgba(100, 200, 255, 0.2);
+                border-radius: 16px;
+            }
+            QLabel { background: transparent; }
+        """)
+
+        layout = QVBoxLayout(central)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(16)
+
+        # Header
+        header = QLabel("Claude Max")
+        header.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
+        header.setStyleSheet("color: #0ea5e9;")
+        layout.addWidget(header)
+
+        # Session Quota
+        session_title = QLabel("Session Quota")
+        session_title.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+        session_title.setStyleSheet("color: #94a3b8; margin-top: 4px;")
+        layout.addWidget(session_title)
+
+        self.session_bar = QLabel()
+        self.session_bar.setFont(QFont("Courier New", 10))
+        self.session_bar.setStyleSheet("color: #06b6d4;")
+        layout.addWidget(self.session_bar)
+
+        self.session_text = QLabel()
+        self.session_text.setFont(QFont("Segoe UI", 8))
+        self.session_text.setStyleSheet("color: #64748b;")
+        layout.addWidget(self.session_text)
+
+        # Weekly Quota
+        weekly_title = QLabel("Weekly Quota")
+        weekly_title.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+        weekly_title.setStyleSheet("color: #94a3b8; margin-top: 6px;")
+        layout.addWidget(weekly_title)
+
+        self.weekly_bar = QLabel()
+        self.weekly_bar.setFont(QFont("Courier New", 10))
+        self.weekly_bar.setStyleSheet("color: #10b981;")
+        layout.addWidget(self.weekly_bar)
+
+        self.weekly_text = QLabel()
+        self.weekly_text.setFont(QFont("Segoe UI", 8))
+        self.weekly_text.setStyleSheet("color: #64748b;")
+        layout.addWidget(self.weekly_text)
+
+        layout.addStretch()
+
+        # Status
+        self.status = QLabel("Syncing...")
+        self.status.setFont(QFont("Segoe UI", 7))
+        self.status.setStyleSheet("color: #475569; text-align: center;")
+        self.status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.status)
 
     def fetch_quota_data(self):
         if not self.oauth_token:
+            self.show_error()
             return
 
         try:
@@ -55,125 +119,96 @@ class ClaudeQuotaWidget(QMainWindow):
                     'anthropic-beta': 'usage-2024-06-01'
                 }
             )
-            with urllib.request.urlopen(req, timeout=10) as response:
+            with urllib.request.urlopen(req, timeout=8) as response:
                 data = json.loads(response.read())
                 self.quota_data = data.get('usage', {})
-                print(f"Quota data fetched: {self.quota_data}")
+                self.connection_error = False
                 self.update_display()
-        except urllib.error.HTTPError as e:
-            print(f"API Error {e.code}: {e.read().decode()}")
+        except urllib.error.URLError:
+            self.connection_error = True
+            self.hide_widget()
         except Exception as e:
-            print(f"Error fetching quota: {e}")
-
-    def setup_ui(self):
-        central = QWidget()
-        self.setCentralWidget(central)
-        central.setStyleSheet("""
-            QWidget {
-                background: rgba(17, 24, 39, 0.92);
-                border: 1px solid rgba(75, 85, 99, 0.3);
-                border-radius: 14px;
-            }
-            QLabel { background: transparent; }
-        """)
-
-        layout = QVBoxLayout(central)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(14)
-
-        # Header
-        header = QHBoxLayout()
-        title = QLabel("Claude")
-        title.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
-        title.setStyleSheet("color: #60a5fa;")
-        header.addWidget(title)
-
-        self.status = QLabel("Max")
-        self.status.setFont(QFont("Segoe UI", 10))
-        self.status.setStyleSheet("color: #a78bfa;")
-        header.addStretch()
-        header.addWidget(self.status)
-        layout.addLayout(header)
-
-        # Session Quota
-        self.add_quota_section(layout, "Session", "session_tokens")
-        self.add_quota_section(layout, "Weekly", "weekly_tokens")
-
-        # Token types breakdown
-        layout.addSpacing(8)
-        types_label = QLabel("Token Limits")
-        types_label.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
-        types_label.setStyleSheet("color: #9ca3af; margin-top: 6px;")
-        layout.addWidget(types_label)
-
-        for model in ["claude_3_opus_tokens", "claude_3_sonnet_tokens", "claude_3_haiku_tokens"]:
-            self.add_token_limit(layout, model)
-
-        layout.addStretch()
-
-        self.time_label = QLabel()
-        self.time_label.setFont(QFont("Segoe UI", 8))
-        self.time_label.setStyleSheet("color: #6b7280; text-align: center;")
-        layout.addWidget(self.time_label)
-
-    def add_quota_section(self, layout, label_text, key):
-        container = QVBoxLayout()
-        container.setSpacing(6)
-
-        label = QLabel(label_text)
-        label.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
-        label.setStyleSheet("color: #d1d5db;")
-        container.addWidget(label)
-
-        bar_layout = QHBoxLayout()
-        bar_layout.setSpacing(8)
-
-        # Progress visualization
-        bar_label = QLabel("████░░░░░░")
-        bar_label.setFont(QFont("Courier New", 9))
-        bar_label.setStyleSheet("color: #60a5fa;")
-        bar_layout.addWidget(bar_label)
-
-        pct = QLabel("42%")
-        pct.setFont(QFont("Segoe UI", 9))
-        pct.setStyleSheet("color: #9ca3af;")
-        bar_layout.addWidget(pct)
-        container.addLayout(bar_layout)
-
-        reset_label = QLabel("Resets in 4d 12h")
-        reset_label.setFont(QFont("Segoe UI", 8))
-        reset_label.setStyleSheet("color: #6b7280;")
-        container.addWidget(reset_label)
-
-        layout.addLayout(container)
-
-    def add_token_limit(self, layout, model_key):
-        row = QHBoxLayout()
-        row.setSpacing(12)
-
-        model_name = model_key.replace("claude_3_", "").replace("_tokens", "").capitalize()
-        name = QLabel(model_name)
-        name.setFont(QFont("Segoe UI", 8))
-        name.setStyleSheet("color: #d1d5db; min-width: 50px;")
-        row.addWidget(name)
-
-        usage = QLabel("1.2M / 2M")
-        usage.setFont(QFont("Segoe UI", 8))
-        usage.setStyleSheet("color: #9ca3af; text-align: right;")
-        row.addStretch()
-        row.addWidget(usage)
-
-        layout.addLayout(row)
+            self.connection_error = True
+            self.hide_widget()
 
     def update_display(self):
-        if self.quota_data:
-            self.time_label.setText(f"Updated {datetime.now().strftime('%H:%M:%S')}")
+        if self.connection_error or not self.quota_data:
+            return
+
+        try:
+            # Session quota
+            session_used = self.quota_data.get('session_tokens', {}).get('used_tokens', 0)
+            session_limit = self.quota_data.get('session_tokens', {}).get('token_limit', 100000)
+            session_reset = self.quota_data.get('session_tokens', {}).get('reset_time_iso', '')
+            session_pct = int((session_used / session_limit * 100)) if session_limit > 0 else 0
+
+            # Weekly quota
+            weekly_used = self.quota_data.get('weekly_tokens', {}).get('used_tokens', 0)
+            weekly_limit = self.quota_data.get('weekly_tokens', {}).get('token_limit', 1000000)
+            weekly_reset = self.quota_data.get('weekly_tokens', {}).get('reset_time_iso', '')
+            weekly_pct = int((weekly_used / weekly_limit * 100)) if weekly_limit > 0 else 0
+
+            # Draw progress bars
+            bar_width = 20
+            session_filled = int(bar_width * session_pct / 100)
+            session_bar = '█' * session_filled + '░' * (bar_width - session_filled)
+            self.session_bar.setText(f"{session_bar} {session_pct}%")
+
+            weekly_filled = int(bar_width * weekly_pct / 100)
+            weekly_bar = '█' * weekly_filled + '░' * (bar_width - weekly_filled)
+            self.weekly_bar.setText(f"{weekly_bar} {weekly_pct}%")
+
+            # Display info
+            session_info = f"{self.format_tokens(session_used)} / {self.format_tokens(session_limit)}"
+            if session_reset:
+                session_reset_in = self.get_time_until(session_reset)
+                session_info += f" • Resets {session_reset_in}"
+            self.session_text.setText(session_info)
+
+            weekly_info = f"{self.format_tokens(weekly_used)} / {self.format_tokens(weekly_limit)}"
+            if weekly_reset:
+                weekly_reset_in = self.get_time_until(weekly_reset)
+                weekly_info += f" • Resets {weekly_reset_in}"
+            self.weekly_text.setText(weekly_info)
+
+            self.status.setText(f"Updated {datetime.now().strftime('%H:%M:%S')}")
+            self.show()
+
+        except Exception as e:
+            print(f"Error updating display: {e}")
+            self.hide_widget()
+
+    def format_tokens(self, tokens):
+        if tokens >= 1000000:
+            return f"{tokens / 1000000:.1f}M"
+        elif tokens >= 1000:
+            return f"{tokens / 1000:.1f}K"
+        return str(int(tokens))
+
+    def get_time_until(self, iso_time):
+        try:
+            reset_time = datetime.fromisoformat(iso_time.replace('Z', '+00:00'))
+            now = datetime.now(reset_time.tzinfo)
+            delta = reset_time - now
+            hours = delta.seconds // 3600
+            minutes = (delta.seconds % 3600) // 60
+            if delta.days > 0:
+                return f"in {delta.days}d {hours}h"
+            return f"in {hours}h {minutes}m"
+        except:
+            return "soon"
+
+    def show_error(self):
+        self.status.setText("No credentials found")
+        self.hide_widget()
+
+    def hide_widget(self):
+        self.hide()
 
     def setup_timer(self):
         self.timer = QTimer()
         self.timer.timeout.connect(self.fetch_quota_data)
-        self.timer.start(30 * 1000)  # Update every 30 seconds
-        self.fetch_quota_data()
+        self.timer.start(30 * 1000)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -183,7 +218,23 @@ class ClaudeQuotaWidget(QMainWindow):
         if hasattr(self, 'drag_pos'):
             self.move(event.globalPosition().toPoint() - self.drag_pos)
 
+def setup_autostart():
+    startup_dir = Path.home() / 'AppData' / 'Roaming' / 'Microsoft' / 'Windows' / 'Start Menu' / 'Programs' / 'Startup'
+    widget_path = Path(__file__).resolve()
+
+    startup_script = startup_dir / 'claude-widget.vbs'
+    vbs_content = f'''Set objShell = CreateObject("WScript.Shell")
+objShell.Run "python ""{widget_path}""", 0, False
+'''
+
+    try:
+        startup_script.write_text(vbs_content)
+        print(f"Autostart configured: {startup_script}")
+    except Exception as e:
+        print(f"Could not configure autostart: {e}")
+
 if __name__ == '__main__':
+    setup_autostart()
     app = QApplication(sys.argv)
     widget = ClaudeQuotaWidget()
     widget.show()
