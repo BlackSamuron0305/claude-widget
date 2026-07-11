@@ -211,12 +211,14 @@ class ClaudeQuotaWidget(QMainWindow):
         self.timer.start(30 * 1000)
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+        # Fixed position - no dragging
+        pass
 
-    def mouseMoveEvent(self, event):
-        if hasattr(self, 'drag_pos'):
-            self.move(event.globalPosition().toPoint() - self.drag_pos)
+    def moveEvent(self, event):
+        # Keep widget in bottom-right corner
+        screen = QApplication.primaryScreen()
+        screen_geo = screen.geometry()
+        self.move(screen_geo.width() - 330, screen_geo.height() - 280)
 
 def setup_autostart():
     startup_dir = Path.home() / 'AppData' / 'Roaming' / 'Microsoft' / 'Windows' / 'Start Menu' / 'Programs' / 'Startup'
