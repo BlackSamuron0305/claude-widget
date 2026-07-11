@@ -1,12 +1,7 @@
-node_modules/
-dist/
-release/
+bin/
+obj/
 *.log
 .DS_Store
-out/
-*.exe
-*.dmg
-*.AppImage
 .idea/
 .vscode/
 *.swp
@@ -14,4 +9,3 @@ out/
 *~
 .env
 .env.local
-*.tsbuildinfo
